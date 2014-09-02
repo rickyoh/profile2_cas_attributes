@@ -1,0 +1,76 @@
+<?php
+/*
+ * Implements hook_form_alter().
+ */
+function profile2_cas_attributes_form_alter(&$form, &$form_state, $form_id){
+ 
+  if($form_id == 'cas_attributes_admin_settings'){
+   $profileTypes = profile2_get_types();
+   $cas_attributes = variable_get('cas_attributes', array());
+   $cas_attributes += array('sync_every_login' => NULL, 'relations' => array('mail' => NULL, 'name' => NULL));
+
+    foreach($profileTypes as $profileType){
+     $form['cas_attributes']['profile_relations'][$profileType->type] = array(
+        '#type' => 'fieldset',
+        '#title' => t('CAS attribute mapping to Profile2 bundle: @profile_type', array('@profile_type'=>$profileType->type)),
+      );
+      $relations = (isset($cas_attributes['profile_relations'][$profileType->type])) ? $cas_attributes['profile_relations'][$profileType->type] : '';
+      
+      foreach (field_info_instances('profile2', $profileType->type) as $name => $instance) {
+        $field = field_info_field($instance['field_name']);
+        if ($field['type'] == 'text') {
+          $form['cas_attributes']['profile_relations'][$profileType->type][$name] = array(
+            '#type' => 'textfield',
+            '#title' => t($instance['label']),
+            '#default_value' => isset($relations[$name]) ? $relations[$name] : '',
+            '#size' => 50,
+            '#description' => t('The account field with name %field_name.', array('%field_name' => $instance['field_name'])),
+          );
+        }
+      }
+      
+    }
+  }
+}
+
+
+
+/**
+ * Implements hook_cas_user_presave().
+ */
+function profile2_cas_attributes_user_presave(&$edit, $account) {
+
+  $cas_attributes = variable_get('cas_attributes', array());
+  $cas_attributes += array('sync_every_login' => NULL, 'relations' => array('mail' => NULL, 'name' => NULL));
+
+/*
+  // We synchronize on the first login (always) and on future logins (if chosen).
+  if ($account->login && !$cas_attributes['sync_every_login']) {
+    // The user has logged in before and we are not set to always synchronize.
+    return;
+  }
+*/
+  //if(!isset($edit['cas_user']['name'])){
+  if(!isset($account->original->cas_name)){  
+    return;
+  }
+
+  //$data = array('cas' => $edit['cas_user']['name']);
+  
+  $data = array('cas' => $account->original->cas_name);
+  if(isset($cas_attributes['profile_relations'])){
+    foreach($cas_attributes['profile_relations'] as $profileType => $profileFields){
+      $profile = profile2_load_by_user($account->uid, $type_name = $profileType);
+      if(!$profile){
+        $profile = profile_create(array('type' => $profileType, 'uid' => $account->uid));
+      }       
+      foreach($profileFields as $fieldKey => $token){
+        if(strlen($token) > 0){
+          $result = trim(token_replace($token, $data, array('clear' => TRUE)));
+          $profile->{$fieldKey}[LANGUAGE_NONE][]['value'] = $result;    
+        }
+      }
+      profile2_save($profile);
+    }
+  }
+}

@@ -1,0 +1,8 @@
+name = "Profile2 Cas Attributes"
+description = "Integrates profile2 entities with cas attributes"
+package = "Central Authentication Service"
+core = 7.x
+
+dependencies[] = cas
+dependencies[] = cas_attributes
+dependencies[] = profile2
